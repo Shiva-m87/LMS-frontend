@@ -5,7 +5,6 @@ import { useAuth } from '../context/AuthContext';
 
 const ManagerDashboard = () => {
     const [leaves, setLeaves] = useState([]);
-    const [reimbursements, setReimbursements] = useState([]);
     const [employees, setEmployees] = useState([]);
     const [activeTab, setActiveTab] = useState('overview'); // UI tab state
 
@@ -24,13 +23,11 @@ const ManagerDashboard = () => {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [leavesRes, reimbRes, empRes] = await Promise.all([
+            const [leavesRes, empRes] = await Promise.all([
                 axiosInstance.get('/leaves'),
-                axiosInstance.get('/reimbursements'),
                 axiosInstance.get('/users?role=Employee')
             ]);
             setLeaves(leavesRes.data);
-            setReimbursements(reimbRes.data);
             setEmployees(empRes.data);
         } catch (err) {
             setError('Failed to fetch dashboard data');
@@ -49,15 +46,6 @@ const ManagerDashboard = () => {
             fetchData();
         } catch (err) {
             setError('Error updating leave status');
-        }
-    };
-
-    const updateReimbursementStatus = async (id, status) => {
-        try {
-            await axiosInstance.put(`/reimbursements/${id}/status`, { status });
-            fetchData();
-        } catch (err) {
-            setError('Error updating claim status');
         }
     };
 
@@ -115,15 +103,9 @@ const ManagerDashboard = () => {
     // derived stats
     const totalEmployees = employees.length;
     const pendingLeaves = leaves.filter(l => l.status === 'Pending').length;
-    const pendingReimbursements = reimbursements.filter(r => r.status === 'Pending').length;
     const approvedThisMonth = leaves.filter(l => {
         if (l.status !== 'Approved') return false;
         const d = new Date(l.updatedAt);
-        const now = new Date();
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    }).length + reimbursements.filter(r => {
-        if (r.status !== 'Approved') return false;
-        const d = new Date(r.updatedAt);
         const now = new Date();
         return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     }).length;
@@ -147,13 +129,6 @@ const ManagerDashboard = () => {
         return acc;
     }, {});
     const leaveTrendData = monthNames.map((m, idx) => ({ month: m, count: leaveTrendMap[idx] || 0 }));
-
-    // Reimbursement Bar chart
-    const reimbStatusCount = reimbursements.reduce((acc, r) => {
-        acc[r.status] = (acc[r.status] || 0) + 1;
-        return acc;
-    }, {});
-    const reimbBarData = Object.keys(reimbStatusCount).map(status => ({ name: status, count: reimbStatusCount[status] }));
 
     return (
         <div className="dashboard-layout">
@@ -184,7 +159,6 @@ const ManagerDashboard = () => {
                             {[
                                 { title: 'Total Employees', value: totalEmployees, color: 'var(--primary)' },
                                 { title: 'Pending Leaves', value: pendingLeaves, color: 'var(--warning)' },
-                                { title: 'Pending Reimbursements', value: pendingReimbursements, color: 'var(--warning)' },
                                 { title: 'Approved This Month', value: approvedThisMonth, color: 'var(--success)' }
                             ].map((stat, idx) => (
                                 <div key={idx} className="card" style={{ padding: '1.5rem', textAlign: 'center' }}>
@@ -222,20 +196,6 @@ const ManagerDashboard = () => {
                                             <Tooltip contentStyle={{ background: 'var(--bg-card)', border: 'none' }} />
                                             <Line type="monotone" dataKey="count" stroke="var(--primary)" strokeWidth={2} />
                                         </LineChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
-                            <div className="card">
-                                <h4 className="mb-4 text-center text-sm">Reimbursement Status</h4>
-                                <div style={{ height: 200 }}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={reimbBarData}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                                            <XAxis dataKey="name" stroke="var(--text-secondary)" fontSize={12} />
-                                            <YAxis stroke="var(--text-secondary)" fontSize={12} allowDecimals={false} />
-                                            <Tooltip contentStyle={{ background: 'var(--bg-card)', border: 'none' }} />
-                                            <Bar dataKey="count" fill="var(--success)" radius={[4, 4, 0, 0]} />
-                                        </BarChart>
                                     </ResponsiveContainer>
                                 </div>
                             </div>
@@ -281,51 +241,6 @@ const ManagerDashboard = () => {
                                 </div>
                             </div>
 
-                            <div className="card" style={{ padding: '0' }}>
-                                <h3 style={{ padding: '1.5rem 1.5rem 0' }}>Pending Reimbursement Claims</h3>
-                                <div className="table-container" style={{ border: 'none', borderRadius: '0', background: 'transparent' }}>
-                                    <table>
-                                        <thead>
-                                            <tr>
-                                                <th>Employee</th>
-                                                <th>Category</th>
-                                                <th>Amount</th>
-                                                <th>Description</th>
-                                                <th>Receipt</th>
-                                                <th>Status</th>
-                                                <th>Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {reimbursements.filter(r => r.status === 'Pending').map((r) => (
-                                                <tr key={r._id}>
-                                                    <td>
-                                                        <div><strong>{r.employee?.name}</strong></div>
-                                                    </td>
-                                                    <td>{r.category}</td>
-                                                    <td>${r.amount}</td>
-                                                    <td>{r.description}</td>
-                                                    <td>
-                                                        {r.receiptUrl ? (
-                                                            <a href={r.receiptUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)' }}>View</a>
-                                                        ) : 'None'}
-                                                    </td>
-                                                    <td>
-                                                        <span className={`badge badge-${r.status.toLowerCase()}`}>{r.status}</span>
-                                                    </td>
-                                                    <td>
-                                                        <div className="flex gap-2">
-                                                            <button onClick={() => updateReimbursementStatus(r._id, 'Approved')} className="btn btn-success" style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}>Approve</button>
-                                                            <button onClick={() => updateReimbursementStatus(r._id, 'Rejected')} className="btn btn-danger" style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}>Reject</button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                            {reimbursements.filter(r => r.status === 'Pending').length === 0 && <tr><td colSpan="7" className="text-center">No pending claims.</td></tr>}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
                         </div>
                     </>
                 )}
