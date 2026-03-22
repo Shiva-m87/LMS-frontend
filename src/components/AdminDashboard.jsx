@@ -28,6 +28,14 @@ const AdminDashboard = () => {
   });
   const [successMessage, setSuccessMessage] = useState(null);
 
+  // Search & Filter States
+  const [userSearch, setUserSearch] = useState('');
+  const [leaveSearch, setLeaveSearch] = useState('');
+  const [leaveStatusFilter, setLeaveStatusFilter] = useState('All');
+  const [reimbSearch, setReimbSearch] = useState('');
+  const [reimbStatusFilter, setReimbStatusFilter] = useState('All');
+  const [reimbCategoryFilter, setReimbCategoryFilter] = useState('All');
+
   const [stats, setStats] = useState({
     totalLeaves: 0,
     totalReimbursements: 0,
@@ -111,6 +119,40 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleRemoveUser = async (id) => {
+    if (!window.confirm("Are you sure you want to remove this user?")) return;
+    try {
+      await axiosInstance.delete(`/users/${id}`);
+      setSuccessMessage("User removed successfully.");
+      setTimeout(() => setSuccessMessage(null), 3000);
+      fetchData();
+    } catch (err) {
+      setError(err.response?.data?.message || "Error removing user");
+      setTimeout(() => setError(null), 3000);
+    }
+  };
+
+  // Process Filtered and Sorted Data
+  const sortedPendingRequests = userRequests
+    .filter((r) => r.status === "Pending")
+    .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0)); // Oldest first for requests
+
+  const filteredUsers = allUsers
+    .filter(u => u.name.toLowerCase().includes(userSearch.toLowerCase()) || 
+                 u.email.toLowerCase().includes(userSearch.toLowerCase()))
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+  const filteredLeaves = allLeaves
+    .filter(l => leaveStatusFilter === 'All' || l.status === leaveStatusFilter)
+    .filter(l => l.employee?.name?.toLowerCase().includes(leaveSearch.toLowerCase()))
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+  const filteredReimbursements = allReimbursements
+    .filter(r => reimbStatusFilter === 'All' || r.status === reimbStatusFilter)
+    .filter(r => reimbCategoryFilter === 'All' || r.category === reimbCategoryFilter)
+    .filter(r => r.employee?.name?.toLowerCase().includes(reimbSearch.toLowerCase()))
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
   if (loading) return <div className="spinner"></div>;
 
   const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444"];
@@ -121,6 +163,15 @@ const AdminDashboard = () => {
     { name: "Leaves", value: stats.totalLeaves },
     { name: "Claims", value: stats.totalReimbursements },
   ];
+
+  const reimbCategoryCount = allReimbursements.reduce((acc, r) => {
+    acc[r.category] = (acc[r.category] || 0) + 1;
+    return acc;
+  }, {});
+  const reimbCategoryData = Object.keys(reimbCategoryCount).map(cat => ({
+    name: cat,
+    value: reimbCategoryCount[cat]
+  }));
 
   return (
     <div className="dashboard-layout">
@@ -325,6 +376,20 @@ const AdminDashboard = () => {
                   </ResponsiveContainer>
                 </div>
               </div>
+              <div className="card">
+                <h4 className="mb-4">Claims by Category</h4>
+                <div style={{ height: 300 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={reimbCategoryData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="name" stroke="var(--text-secondary)" fontSize={12} />
+                      <YAxis stroke="var(--text-secondary)" fontSize={12} allowDecimals={false} />
+                      <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }} itemStyle={{ color: 'var(--warning)' }} />
+                      <Bar dataKey="value" fill="var(--warning)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             </div>
           </>
         )}
@@ -354,8 +419,7 @@ const AdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {userRequests
-                      .filter((r) => r.status === "Pending")
+                    {sortedPendingRequests
                       .map((req) => (
                         <tr key={req._id}>
                           <td style={{ fontSize: "0.9rem" }}>
@@ -446,18 +510,28 @@ const AdminDashboard = () => {
         )}
 
         {activeTab === "users" && (
-          <div className="grid grid-cols-2">
+          <div className="admin-users-grid">
             <div
               className="card"
               style={{ padding: "0", height: "fit-content" }}
             >
-              <h3 style={{ padding: "1.5rem 1.5rem 0" }}>All Users</h3>
+              <div className="flex justify-between items-center" style={{ padding: "1.5rem 1.5rem 0" }}>
+                <h3>All Users</h3>
+                <input 
+                  type="text" 
+                  placeholder="Search by name or email..." 
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  style={{ width: "220px", padding: "0.4rem 0.8rem", borderRadius: "var(--radius-sm)" }}
+                />
+              </div>
               <div
                 className="table-container"
                 style={{
                   border: "none",
                   borderRadius: "0",
                   background: "transparent",
+                  marginTop: "1rem"
                 }}
               >
                 <table>
@@ -466,10 +540,11 @@ const AdminDashboard = () => {
                       <th>Name</th>
                       <th>Email</th>
                       <th>Role</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {allUsers.map((user) => (
+                    {filteredUsers.map((user) => (
                       <tr key={user._id}>
                         <td>{user.name}</td>
                         <td>{user.email}</td>
@@ -478,8 +553,23 @@ const AdminDashboard = () => {
                             {user.role}
                           </span>
                         </td>
+                        <td>
+                           {user.role !== "Admin" && (
+                             <button
+                               onClick={() => handleRemoveUser(user._id)}
+                               className="btn btn-danger btn-xs"
+                             >
+                               Remove
+                             </button>
+                           )}
+                        </td>
                       </tr>
                     ))}
+                    {filteredUsers.length === 0 && (
+                      <tr>
+                        <td colSpan="4" className="text-center">No users found.</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -547,7 +637,28 @@ const AdminDashboard = () => {
 
         {activeTab === "leaves" && (
           <div>
-            <h3 className="mb-3">All Leave Requests</h3>
+            <div className="flex justify-between items-center mb-3">
+              <h3>All Leave Requests</h3>
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  placeholder="Search employee..." 
+                  value={leaveSearch}
+                  onChange={(e) => setLeaveSearch(e.target.value)}
+                  style={{ width: "200px", padding: "0.4rem 0.8rem", borderRadius: "var(--radius-sm)" }}
+                />
+                <select 
+                  value={leaveStatusFilter}
+                  onChange={(e) => setLeaveStatusFilter(e.target.value)}
+                  style={{ width: "130px", padding: "0.4rem 0.8rem", borderRadius: "var(--radius-sm)" }}
+                >
+                  <option value="All">All Status</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Approved">Approved</option>
+                  <option value="Rejected">Rejected</option>
+                </select>
+              </div>
+            </div>
             <div className="card" style={{ padding: "0" }}>
               <div
                 className="table-container"
@@ -568,7 +679,7 @@ const AdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {allLeaves.map((leave) => (
+                    {filteredLeaves.map((leave) => (
                       <tr key={leave._id}>
                         <td>
                           <div>
@@ -628,7 +739,7 @@ const AdminDashboard = () => {
                         </td>
                       </tr>
                     ))}
-                    {allLeaves.length === 0 && (
+                    {filteredLeaves.length === 0 && (
                       <tr>
                         <td colSpan="5" className="text-center">
                           No leave requests found.
@@ -644,7 +755,39 @@ const AdminDashboard = () => {
 
         {activeTab === "reimbursements" && (
           <div>
-            <h3 className="mb-3">All Reimbursement Claims</h3>
+            <div className="flex justify-between items-center mb-3">
+              <h3>All Reimbursement Claims</h3>
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  placeholder="Search employee..." 
+                  value={reimbSearch}
+                  onChange={(e) => setReimbSearch(e.target.value)}
+                  style={{ width: "180px", padding: "0.4rem 0.8rem", borderRadius: "var(--radius-sm)" }}
+                />
+                <select 
+                  value={reimbCategoryFilter}
+                  onChange={(e) => setReimbCategoryFilter(e.target.value)}
+                  style={{ width: "130px", padding: "0.4rem 0.8rem", borderRadius: "var(--radius-sm)" }}
+                >
+                  <option value="All">All Categories</option>
+                  <option value="Travel">Travel</option>
+                  <option value="Food">Food</option>
+                  <option value="Equipment">Equipment</option>
+                  <option value="Other">Other</option>
+                </select>
+                <select 
+                  value={reimbStatusFilter}
+                  onChange={(e) => setReimbStatusFilter(e.target.value)}
+                  style={{ width: "120px", padding: "0.4rem 0.8rem", borderRadius: "var(--radius-sm)" }}
+                >
+                  <option value="All">All Status</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Approved">Approved</option>
+                  <option value="Rejected">Rejected</option>
+                </select>
+              </div>
+            </div>
             <div className="card" style={{ padding: "0" }}>
               <div
                 className="table-container"
@@ -667,7 +810,7 @@ const AdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {allReimbursements.map((r) => (
+                    {filteredReimbursements.map((r) => (
                       <tr key={r._id}>
                         <td>
                           <div>
@@ -739,7 +882,7 @@ const AdminDashboard = () => {
                         </td>
                       </tr>
                     ))}
-                    {allReimbursements.length === 0 && (
+                    {filteredReimbursements.length === 0 && (
                       <tr>
                         <td colSpan="7" className="text-center">
                           No claims found.
