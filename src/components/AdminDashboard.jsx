@@ -446,13 +446,7 @@ const AdminDashboard = () => {
         )}
 
         {activeTab === "users" && (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(0, 1fr) 350px",
-              gap: "2rem",
-            }}
-          >
+          <div className="grid grid-cols-2">
             <div
               className="card"
               style={{ padding: "0", height: "fit-content" }}
